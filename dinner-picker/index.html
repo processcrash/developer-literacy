@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>今晚吃什么？🍽️</title>
+  <meta name="description" content="今晚吃什么？一键随机抽选，解决选择困难症！">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍜</text></svg>">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <!-- 顶部标题 -->
+    <header class="app-header">
+      <h1 class="title">今晚<span class="title-accent">吃</span>什么</h1>
+      <p class="subtitle">选择困难症终结者 · 一键帮你做决定</p>
+    </header>
+
+    <!-- 分类筛选 -->
+    <section class="filters" aria-label="菜品分类筛选">
+      <button class="filter-chip active" data-category="all">🍽️ 全部</button>
+      <button class="filter-chip" data-category="favorite">❤️ 最爱</button>
+      <button class="filter-chip" data-category="chinese">🥢 中餐</button>
+      <button class="filter-chip" data-category="japanese">🍣 日料</button>
+      <button class="filter-chip" data-category="western">🍝 西餐</button>
+      <button class="filter-chip" data-category="hotpot">🍲 火锅</button>
+      <button class="filter-chip" data-category="fast">🍔 快餐</button>
+      <button class="filter-chip" data-category="dessert">🍰 甜品</button>
+    </section>
+
+    <!-- 在家做开关 -->
+    <label class="home-toggle" id="homeToggleWrap">
+      <input type="checkbox" id="homeToggle" checked>
+      <span class="home-toggle-track" aria-hidden="true"><span class="home-toggle-thumb"></span></span>
+      <span class="home-toggle-text">🥘 在家做</span>
+      <span class="home-toggle-sub">仅抽简单易做的菜</span>
+    </label>
+
+    <!-- 抽选主区域 -->
+    <main class="picker">
+      <div class="result-card" id="resultCard">
+        <div class="result-emoji" id="resultEmoji">🤔</div>
+        <div class="result-name" id="resultName">点击下方按钮，决定今晚吃什么</div>
+        <div class="result-tags" id="resultTags"></div>
+      </div>
+
+      <div class="action-area">
+        <button class="btn btn-primary" id="pickBtn" type="button">
+          <span class="btn-icon">🎲</span>
+          <span class="btn-text">抽一个！</span>
+        </button>
+        <button class="btn btn-ghost" id="pickFastBtn" type="button" title="不做筛选，直接随机">
+          ⚡ 没时间想
+        </button>
+      </div>
+
+      <p class="hint" id="poolHint">从 36 道菜中为你挑选</p>
+    </main>
+
+    <!-- 历史记录 -->
+    <section class="history" id="historySection">
+      <div class="history-header">
+        <h2 class="history-title">📜 历史记录</h2>
+        <button class="btn btn-mini" id="clearHistoryBtn" type="button">清空</button>
+      </div>
+      <ul class="history-list" id="historyList"></ul>
+    </section>
+  </div>
+
+  <!-- 抽选遮罩动画 -->
+  <div class="overlay" id="overlay" aria-hidden="true">
+    <div class="overlay-emoji" id="overlayEmoji">🍜</div>
+    <div class="overlay-text">正在思考今晚吃什么…</div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

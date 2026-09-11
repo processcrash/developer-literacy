@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>aipw · AI Personal Workbench（原型 V3）</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--muted:#64748b;--blue:#2563eb;--red:#dc2626;
+--warm:#fdf3e0;--warm-b:#f0b34d;--cool:#e8f0f8;--cool-b:#7fa6c9;--arch:#eef1f5;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+/* ===== 顶栏 ===== */
+#topbar{display:flex;align-items:center;gap:12px;padding:10px 16px;background:#fff;border-bottom:1px solid var(--border);z-index:20}
+.logo{font-weight:800;font-size:17px}
+.logo span{color:var(--blue);font-weight:500;font-size:12px;margin-left:4px}
+#topbar select,#topbar input{padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:13px;color:var(--text)}
+#searchBox{flex:1;max-width:260px}
+#newTaskBtn{padding:6px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;cursor:pointer;font-size:13px}
+#newTaskBtn:hover{background:#f8fafc}
+/* ===== 主体 ===== */
+#main{flex:1;display:flex;min-height:0}
+#board{flex:1;display:flex;gap:12px;padding:14px;overflow-x:auto;overflow-y:hidden;align-items:stretch}
+.column{min-width:230px;flex:1;display:flex;flex-direction:column;border-radius:12px;padding:10px}
+.column.human{background:var(--warm);border-top:3px solid var(--warm-b)}
+.column.ai{background:var(--cool);border-top:3px solid var(--cool-b)}
+.column.archived{background:var(--arch);border-top:3px solid #cbd5e1;opacity:.92}
+.column h2{font-size:13px;padding:2px 2px 10px;display:flex;align-items:center;gap:6px;color:#334155;white-space:nowrap;overflow:hidden}
+.sname{display:flex;align-items:center;gap:4px;font-weight:600;flex:none}
+.column h2 .count{background:#fff;border-radius:10px;padding:0 8px;font-size:11px;color:#64748b;flex:none}
+.column h2 .tags{display:flex;gap:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;align-items:center}
+.tag-a{font-size:11px;padding:1px 7px;border-radius:8px;background:#fff;border:1px solid var(--border);color:#475569;white-space:nowrap}
+.tag-none{font-size:11px;color:#94a3b8;white-space:nowrap}
+.col-set{margin-left:auto;cursor:pointer;border:none;background:transparent;font-size:14px;color:#64748b;padding:0 2px;flex:none}
+.col-set:hover{color:var(--blue)}
+.cards{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding-bottom:4px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px;cursor:grab;font-size:13px;box-shadow:0 1px 2px rgba(0,0,0,.05);user-select:none}
+.card:hover{box-shadow:0 3px 8px rgba(0,0,0,.1)}
+.card:active{cursor:grabbing}
+.card.dragging{opacity:.5}
+.card.doing{background:#f0f9ff;border-color:#7dd3fc}
+.card.awaiting-decision{background:#fef2f2;border:2px solid var(--red);animation:breath 2.4s ease-in-out infinite}
+@keyframes breath{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.30)}50%{box-shadow:0 0 0 7px rgba(220,38,38,.10)}}
+.alert{font-size:11px;font-weight:700;color:#b91c1c;background:#fee2e2;border-radius:6px;padding:2px 7px;display:inline-block;margin-bottom:5px}
+.card .title{font-weight:600;line-height:1.4;display:flex;align-items:center;gap:6px}
+.lvl{font-size:11px;font-weight:800;padding:1px 5px;border-radius:4px;color:#fff;flex:none}
+.lvl.E{background:#7c3aed}.lvl.S{background:var(--blue)}.lvl.T{background:#64748b}
+.card .meta{color:var(--muted);font-size:12px;margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.pulse{width:8px;height:8px;border-radius:50%;background:#0ea5e9;display:inline-block;animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+.card .desc{color:#475569;font-size:12px;line-height:1.45;margin-top:4px;max-height:2.9em;overflow:hidden;white-space:pre-line;cursor:pointer}
+.card .desc.expanded{max-height:none}
+.marks{display:flex;gap:5px;margin-top:5px;flex-wrap:wrap}
+.badge{font-size:11px;padding:1px 6px;border-radius:4px;white-space:nowrap}
+.badge.lock{background:#fef3c7;color:#b45309}
+.badge.fail{background:#fee2e2;color:#b91c1c}
+.badge.stall{background:#fee2e2;color:#b91c1c}
+.column.drop-hover .cards{outline:2px dashed var(--blue);outline-offset:-4px;border-radius:8px}
+/* ===== 聊天面板 ===== */
+#chatPanel{width:420px;background:#fff;border-left:1px solid var(--border);display:none;flex-direction:column;min-height:0}
+#chatPanel.open{display:flex}
+#chatHeader{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#chatStatus{font-size:11px;padding:2px 8px;border-radius:10px;background:#f1f5f9;color:#475569}
+#chatStatus.pending{background:#f1f5f9;color:#475569}
+#chatStatus.doing{background:#dcfce7;color:#15803d}
+#chatStatus.awaiting-decision{background:#fee2e2;color:#b91c1c}
+#chatTitle{font-weight:600;flex:1;font-size:14px;min-width:90px}
+#chatClose{border:none;background:none;cursor:pointer;font-size:17px;color:var(--muted)}
+#chatMsgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;background:#f8fafc}
+#chatMeta{font-size:12px;color:var(--muted);padding:2px 2px 0}
+#chatMarks{display:flex;gap:5px;padding:4px 2px 0;flex-wrap:wrap}
+#chatDesc{font-size:13px;line-height:1.6;background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+#chatDesc h3{font-size:13px;margin:6px 0 2px}
+#chatDesc .li{padding-left:8px}
+#chatDesc code{background:#f1f5f9;border-radius:4px;padding:0 4px;font-size:12px}
+.tl-label{font-size:11px;color:#94a3b8;text-align:center;margin-top:2px}
+.tsec{background:#fff;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.tsec.current{border-color:#93c5fd;box-shadow:0 0 0 1px #bfdbfe}
+.tsec-head{display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:13px;cursor:pointer;user-select:none;flex-wrap:wrap}
+.tsec-head:hover{background:#f8fafc}
+.tsec-head .arrow{font-size:10px;color:var(--muted)}
+.tsec-head .step-label{font-weight:600}
+.tsec-agent{font-size:11px;color:var(--blue);background:#eff6ff;border-radius:6px;padding:1px 6px}
+.tsec-n{font-size:11px;color:var(--muted)}
+.tsec-out{font-size:11px;color:#15803d;background:#f0fdf4;border-radius:6px;padding:1px 6px}
+.tsec-body{padding:2px 12px 12px;display:flex;flex-direction:column;gap:8px}
+.tsec-output{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:8px 10px;font-size:12px;color:#14532d}
+.tsec-output .t{font-weight:700;margin-bottom:3px;font-size:12px}
+.tsec-files{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}
+.file{font-size:11px;background:#fff;border:1px solid #bbf7d0;border-radius:5px;padding:1px 6px;color:#166534}
+.msg{max-width:90%;padding:8px 11px;border-radius:12px;font-size:13px;line-height:1.55;white-space:pre-wrap;word-break:break-word}
+.msg.agent{align-self:flex-start;background:#f8fafc;border:1px solid var(--border);border-bottom-left-radius:4px}
+.msg.user{align-self:flex-end;background:var(--blue);color:#fff;border-bottom-right-radius:4px}
+.msg.system{align-self:center;background:#eef2f7;color:#64748b;font-size:12px;border-radius:8px;text-align:center}
+.msg .actions{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.msg .actions button{padding:4px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer;font-size:12px;color:var(--text)}
+.msg .actions button:hover{background:#f1f5f9}
+.msg .actions button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+.msg .actions button.primary:hover{background:#1d4ed8}
+.msg .actions button.danger{background:var(--red);border-color:var(--red);color:#fff}
+.msg .actions button.danger:hover{background:#b91c1c}
+.msg .hint{margin-top:6px;font-size:11px;color:#94a3b8;text-align:center}
+.conv-items{margin-top:8px;display:flex;flex-direction:column;gap:6px;text-align:left}
+.conv-item{background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:6px 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.conv-q{flex:1;min-width:150px}
+.conv-res{font-size:12px;color:var(--blue);font-weight:600}
+.conv-acts{display:flex;gap:4px}
+.conv-acts button{font-size:11px;padding:2px 8px}
+#chatInputWrap{padding:10px 12px;border-top:1px solid var(--border);display:flex;gap:8px;background:#fff}
+#chatInput{flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:10px;font-size:13px}
+#chatSend{padding:8px 16px;border:none;border-radius:10px;background:var(--blue);color:#fff;cursor:pointer;font-size:13px}
+#chatSend:hover{background:#1d4ed8}
+/* ===== 弹窗 ===== */
+.mask{position:fixed;inset:0;background:rgba(15,23,42,.4);display:none;align-items:center;justify-content:center;z-index:50}
+.mask.open{display:flex}
+.dialog{background:#fff;border-radius:12px;padding:18px;width:360px}
+.dialog h3{font-size:15px;margin-bottom:12px}
+.dialog input,.dialog select,.dialog textarea{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:10px;font-size:13px;color:var(--text);font-family:inherit}
+.dialog textarea{height:90px;resize:vertical}
+.dialog .btns{display:flex;justify-content:flex-end;gap:8px}
+.dialog button{padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer;font-size:13px}
+.dialog button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+/* ===== 步骤设置浮层 ===== */
+#stepPop{position:fixed;width:300px;background:#fff;border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.18);padding:12px;display:none;z-index:40}
+#stepPop.open{display:block}
+#stepPop .pop-title{font-size:13px;font-weight:700;margin-bottom:8px}
+.mode-row{display:flex;gap:6px;margin-bottom:10px}
+.mode-row label{flex:1;text-align:center;font-size:13px;padding:7px 0;border:1px solid var(--border);border-radius:8px;cursor:pointer;user-select:none}
+.mode-row input{display:none}
+.mode-row label.sel-human{background:var(--warm);border-color:var(--warm-b);font-weight:600}
+.mode-row label.sel-ai{background:var(--cool);border-color:var(--cool-b);font-weight:600}
+#stepPop input[type=text]{width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;margin-bottom:8px}
+.pop-list{max-height:220px;overflow:auto;display:flex;flex-direction:column;gap:4px}
+.pop-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;cursor:pointer;font-size:13px}
+.pop-item:hover{background:#f8fafc}
+.pop-item.disabled{opacity:.45;cursor:not-allowed}
+.pop-item .cap{font-size:11px;color:var(--muted)}
+.dot{width:8px;height:8px;border-radius:50%;flex:none}
+.dot.ok{background:#22c55e}.dot.bad{background:var(--red)}
+#popNew{margin-top:8px;width:100%;padding:6px;border:1px dashed var(--border);border-radius:8px;background:transparent;cursor:pointer;font-size:12px;color:var(--muted)}
+#popNew:hover{color:var(--blue);border-color:var(--blue)}
+#popHumanHint{font-size:12px;color:var(--muted);background:#f8fafc;border-radius:8px;padding:10px;line-height:1.6}
+#note{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);background:#0f172a;color:#e2e8f0;font-size:12px;padding:7px 16px;border-radius:20px;opacity:.88;z-index:10;white-space:nowrap}
+@media (max-width:1250px){
+  #chatPanel{position:absolute;right:0;top:52px;bottom:0;box-shadow:-8px 0 24px rgba(0,0,0,.15);z-index:15}
+  #note{display:none}
+}
+</style>
+</head>
+<body>
+
+<header id="topbar">
+  <div class="logo">aipw<span>· AI 个人工作台（原型 V3）</span></div>
+  <select id="projectSelect"></select>
+  <input id="searchBox" placeholder="搜索任务…"/>
+  <button id="newTaskBtn">＋ 新建任务</button>
+</header>
+
+<div id="main">
+  <section id="board"></section>
+  <aside id="chatPanel">
+    <div id="chatHeader">
+      <span id="chatStatus"></span>
+      <div id="chatTitle"></div>
+      <button id="chatClose" title="关闭">✕</button>
+    </div>
+    <div id="chatMsgs">
+      <div id="chatMeta"></div>
+      <div id="chatMarks"></div>
+      <div id="chatDesc"></div>
+    </div>
+    <div id="chatInputWrap">
+      <input id="chatInput" placeholder="对当前步骤的 agent 说话…（awaiting-decision 在这里回答）"/>
+      <button id="chatSend">发送</button>
+    </div>
+  </aside>
+</div>
+
+<div id="stepPop">
+  <div class="pop-title" id="popStepName"></div>
+  <div class="mode-row">
+    <label id="modeHuman"><input type="radio" name="stepMode" value="human"/> 🧑 人做</label>
+    <label id="modeAi"><input type="radio" name="stepMode" value="ai"/> 🤖 AI 做</label>
+  </div>
+  <div id="popAgentArea">
+    <input type="text" id="popSearch" placeholder="搜索 Agent…"/>
+    <div class="pop-list" id="popList"></div>
+    <button id="popNew">＋ 新建 Agent 条目</button>
+  </div>
+  <div id="popHumanHint" style="display:none">人做模式：已绑定的 Agent 会保留但暂不启用，切回「AI 做」后自动恢复。</div>
+</div>
+
+<div class="mask" id="taskMask">
+  <div class="dialog">
+    <h3>新建任务</h3>
+    <input id="newTitle" placeholder="标题"/>
+    <select id="newLevel">
+      <option value="E">E · Epic（大目标）</option>
+      <option value="S" selected>S · Story（功能块）</option>
+      <option value="T">T · Task（具体工作）</option>
+    </select>
+    <textarea id="newDesc" placeholder="详细描述（支持 markdown）"></textarea>
+    <div class="btns">
+      <button id="newCancel">取消</button>
+      <button id="newOk" class="primary">创建（进入第一步「规划」）</button>
+    </div>
+  </div>
+</div>
+
+<div class="mask" id="agentMask">
+  <div class="dialog">
+    <h3>新建 Agent 条目</h3>
+    <input id="agName" placeholder="名称，如 Claude Code"/>
+    <input id="agCap" placeholder="能力（一句话），如：代码 / 文档 / 数据"/>
+    <input id="agCmd" placeholder="启动命令，如 claude -p"/>
+    <div class="btns">
+      <button id="agCancel">取消</button>
+      <button id="agOk" class="primary">创建并绑定到当前步骤</button>
+    </div>
+  </div>
+</div>
+
+<div id="note">原型 V3：步骤头 ⚙ 设置（人做/AI 做切换）· 仅人做步骤卡片可拖 · doing 卡片浅蓝底 · awaiting-decision 红框红底呼吸 + ⚠ 标签 · 点卡片看完整信息（卡片内容 + 各步骤聊天与产出）· 全部为模拟数据</div>
+
+<script>
+'use strict';
+/* ================= 数据 ================= */
+let AGENTS=[
+  {id:'a1',name:'Claude Code',cap:'代码',health:true,cmd:'claude -p'},
+  {id:'a2',name:'Codex',cap:'代码',health:true,cmd:'codex exec'},
+  {id:'a3',name:'Gemini CLI',cap:'通用',health:false,cmd:'gemini'},
+];
+
+let PROJECTS=[
+  {id:'p1',name:'个人博客',steps:[
+    {id:'plan',label:'规划',mode:'ai',agentIds:['a2']},
+    {id:'impl',label:'实施',mode:'ai',agentIds:['a1','a2']},
+    {id:'review',label:'审查',mode:'human',agentIds:[]},
+    {id:'archive',label:'归档',mode:'human',agentIds:[]},
+  ]},
+  {id:'p2',name:'数据分析',steps:[
+    {id:'plan',label:'规划',mode:'ai',agentIds:['a2']},
+    {id:'research',label:'调研',mode:'human',agentIds:[]},
+    {id:'impl',label:'实施',mode:'ai',agentIds:['a1']},
+    {id:'review',label:'审查',mode:'human',agentIds:[]},
+    {id:'archive',label:'归档',mode:'human',agentIds:[]},
+  ]},
+];
+
+let seq=100;
+function T(o){return Object.assign({id:seq++,substate:'pending',stage:'排队中',failCount:0,fail:false,lock:false,stall:false,startedAt:0,steps:[]},o);}
+
+let tasks=[
+  // ── 个人博客 ──
+  T({pid:'p1',level:'E',title:'博客改版',step:'plan',substate:'pending',
+     desc:'- 目标：整体改版博客，提升阅读体验\n- 验收：首页加载 < 2s，移动端适配\n- 说明：**先规划，再实施**'}),
+  T({pid:'p1',level:'S',title:'发布新文章',step:'plan',substate:'doing',stage:'规划中',startedAt:Date.now(),
+     desc:'写一篇 `DeepSeek` 使用笔记并发布。\n- 目标：产出完整文章\n- 验收：排版正确、配图齐全',
+     steps:[{stepId:'plan',agent:'Codex',chat:[{role:'agent',text:'🤖 Codex 开始规划这篇文章的结构和配图方案…'}]}]}),
+  T({pid:'p1',level:'S',title:'写一篇工具使用笔记',step:'impl',substate:'doing',stage:'写文档',startedAt:Date.now(),
+     desc:'写一篇命令行工具的使用笔记。\n- 目标：讲清楚安装、配置、常用命令\n- 验收：新手照着能做一遍',
+     steps:[
+       {stepId:'plan',agent:'Codex',output:{text:'大纲定稿：安装 / 配置 / 常用命令 三节',files:['outline.md']},
+        chat:[{role:'agent',text:'🤖 规划完成，大纲已定。'},
+              {role:'agent',text:'❓ 需要确认：这篇写多深？（已由你回答：面向新手）'},
+              {role:'user',text:'面向新手，别太深。'}]},
+       {stepId:'impl',agent:'Claude Code',
+        chat:[{role:'agent',text:'🤖 Claude Code 领取了任务，开始写文档。'},
+              {role:'agent',text:'📋 大纲已完成，正在补充示例…'}]},
+     ]}),
+  T({pid:'p1',level:'T',title:'修复首页样式',step:'impl',substate:'pending',fail:true,failCount:3,
+     desc:'首页在窄屏下布局错乱。\n- 目标：修复响应式样式\n- 验收：375px / 768px / 1440px 三种宽度下正常',
+     steps:[
+       {stepId:'plan',agent:'Codex',output:{text:'定位到 3 处可疑样式',files:[]},
+        chat:[{role:'agent',text:'🤖 规划完成，定位到 3 处可疑样式。'}]},
+       {stepId:'impl',agent:'Claude Code',output:{text:'❌ 失败：css 编译报错',files:[]},
+        chat:[{role:'system',text:'❌ 已失败 3 次（css 编译报错），停止自动重派，等你处理。'}]},
+     ]}),
+  T({pid:'p1',level:'T',title:'整理博客素材',step:'impl',substate:'awaiting-decision',lock:true,
+     desc:'把旧的图片和草稿整理归档。\n- 目标：清理素材目录\n- 验收：目录结构清晰',
+     steps:[
+       {stepId:'plan',agent:'Codex',output:{text:'素材盘点：图片 120 张、草稿 34 篇',files:[]},
+        chat:[{role:'agent',text:'🤖 盘点完成。'}]},
+       {stepId:'impl',agent:'Claude Code',
+        chat:[{role:'agent',text:'我准备开始整理素材，需要**写入权限**才能移动文件。'},
+              {role:'system',text:'🔒 权限未确认，任务停在当前步骤，确认后才可派发',decision:'permission'}]},
+     ]}),
+  T({pid:'p1',level:'S',title:'迁移图床',step:'review',substate:'pending',
+     desc:'把文章里的图迁移到新图床。\n- 目标：全部替换外链\n- 验收：所有图片可正常加载',
+     steps:[
+       {stepId:'plan',agent:'Codex',output:{text:'迁移方案：新图床 bucket + 批量替换脚本',files:['plan.md']},
+        chat:[{role:'agent',text:'🤖 规划完成，共 5 篇文章有外链图。'}]},
+       {stepId:'impl',agent:'Claude Code',output:{text:'替换完成：5 篇文章共 23 张图',files:['posts/a.md','posts/b.md','posts/c.md','posts/d.md','posts/e.md']},
+        chat:[{role:'agent',text:'🤖 开始迁移…'},{role:'agent',text:'✅ 已替换 5 篇文章的图片链接。'}]},
+       {stepId:'review',agent:'',
+        chat:[{role:'agent',text:'✅ 已完成迁移，共替换 5 篇文章的图片链接。'},
+              {role:'system',text:'等你验收：通过 → 归档；打回 → 回「实施」重做',decision:'review'}]},
+     ]}),
+  T({pid:'p1',level:'T',title:'改错别字',step:'archive',substate:'pending',
+     desc:'全站错别字修正。',
+     steps:[{stepId:'archive',agent:'',chat:[{role:'system',text:'✅ 通过审查，归档'}]}]}),
+
+  // ── 数据分析 ──
+  T({pid:'p2',level:'S',title:'清洗销售数据',step:'plan',substate:'pending',
+     desc:'清洗 2026 年销售数据。\n- 目标：去掉重复行、补全缺失字段\n- 验收：数据可导入 BI 工具'}),
+  T({pid:'p2',level:'T',title:'调研可视化库',step:'research',substate:'pending',
+     desc:'调研适合本项目的可视化库，产出一份对比表。\n- 验收：3 个候选 + 推荐结论（人做步骤：拖卡推进）'}),
+  T({pid:'p2',level:'S',title:'画季度报表',step:'impl',substate:'doing',stage:'生成图表',startedAt:Date.now(),stall:true,
+     desc:'生成 Q3 季度报表。\n- 目标：四张图表 + 一份 PDF\n- 验收：数字与源数据一致',
+     steps:[
+       {stepId:'plan',agent:'Codex',output:{text:'报表结构：4 张图 + 汇总页',files:[]},
+        chat:[{role:'agent',text:'🤖 规划完成。'}]},
+       {stepId:'impl',agent:'Claude Code',
+        chat:[{role:'agent',text:'🤖 Claude Code 领取了任务。'},
+              {role:'agent',text:'📊 图表已生成，正在核对数据…'},
+              {role:'system',text:'⏳ 长时间没有新活动，可能卡住了',decision:'stall'}]},
+     ]}),
+  T({pid:'p2',level:'T',title:'迁移数据库',step:'impl',substate:'awaiting-decision',
+     desc:'把旧库数据迁移到新库。\n- 目标：零丢失迁移\n- 验收：行数一致、抽样核对通过',
+     steps:[
+       {stepId:'plan',agent:'Codex',output:{text:'迁移脚本 + 回滚方案',files:['migrate.sql']},
+        chat:[{role:'agent',text:'🤖 规划完成。'}]},
+       {stepId:'impl',agent:'Claude Code',
+        chat:[{role:'agent',text:'🤖 迁移到一半，发现目标库里有一张同名旧表。'},
+              {role:'agent',text:'❓ 先删掉旧表，还是先备份再覆盖？',decision:'question',options:['先备份，再覆盖','直接覆盖，不用备份']}]},
+     ]}),
+  T({pid:'p2',level:'T',title:'环境搭建',step:'archive',substate:'pending',
+     desc:'数据分析环境搭建。',
+     steps:[{stepId:'archive',agent:'',chat:[{role:'system',text:'✅ 通过审查，归档'}]}]}),
+];
+
+let currentProject='p1';
+let currentTaskId=null;
+let popStepId=null;
+let expanded=new Set();
+
+/* ================= DOM ================= */
+const boardEl=document.getElementById('board');
+const chatPanel=document.getElementById('chatPanel');
+const projectSelect=document.getElementById('projectSelect');
+const searchBox=document.getElementById('searchBox');
+const stepPop=document.getElementById('stepPop');
+
+/* ================= 工具 ================= */
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function md(txt){
+  return esc(txt)
+    .replace(/^### (.*)$/gm,'<h3>$1</h3>')
+    .replace(/^## (.*)$/gm,'<h3>$1</h3>')
+    .replace(/^# (.*)$/gm,'<h3>$1</h3>')
+    .replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')
+    .replace(/`([^`]+)`/g,'<code>$1</code>')
+    .replace(/^- (.*)$/gm,'<div class="li">• $1</div>')
+    .replace(/\n/g,'<br/>');
+}
+function plain(txt){return txt.replace(/[#*`]/g,'').split('\n').filter(x=>x.trim()).slice(0,2).join(' ');}
+function proj(){return PROJECTS.find(p=>p.id===currentProject);}
+function stepOf(t){const p=PROJECTS.find(x=>x.id===t.pid);return p?p.steps.find(s=>s.id===t.step):null;}
+function agentName(t){
+  const st=stepOf(t);
+  if(!st)return '';
+  const a=AGENTS.find(x=>x.id===st.agentIds[0]);
+  return a?a.name:'';
+}
+function recOf(t,stepId){return t.steps.find(r=>r.stepId===stepId);}
+function curRec(t){
+  let r=recOf(t,t.step);
+  if(!r){r={stepId:t.step,agent:'',chat:[],output:null};t.steps.push(r);}
+  return r;
+}
+const SUBS={pending:'排队中',doing:'干活中','awaiting-decision':'等你决定'};
+const RANK={'awaiting-decision':0,doing:1,pending:2};
+
+/* ================= 看板 ================= */
+function initProjectSelect(){
+  projectSelect.innerHTML=PROJECTS.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+}
+
+function cardEl(t){
+  const st=stepOf(t);
+  const el=document.createElement('div');
+  el.className='card '+t.substate;
+  el.draggable=(st&&st.mode==='human'&&st.id!=='archive');
+  el.dataset.id=t.id;
+  const p=PROJECTS.find(x=>x.id===t.pid);
+  let top='';
+  if(t.substate==='awaiting-decision')top='<div class="alert">⚠ 需要人决策</div>';
+  let marks='';
+  if(t.lock)marks+='<span class="badge lock">🔒 权限待确认</span>';
+  if(t.fail)marks+='<span class="badge fail">❌ 已失败 3 次</span>';
+  if(t.stall)marks+='<span class="badge stall">⏳ 卡死</span>';
+  const subTxt=t.substate==='doing'?'<span class="pulse"></span>'+SUBS[t.substate]:(SUBS[t.substate]||t.stage);
+  el.innerHTML=top+
+    `<div class="title"><span class="lvl ${t.level}">${t.level}</span>${esc(t.title)}</div>`+
+    `<div class="meta"><span>${esc(p?p.name:'')}</span><span>· ${subTxt}</span></div>`+
+    `<div class="desc">${esc(plain(t.desc))}</div>`+
+    (marks?`<div class="marks">${marks}</div>`:'');
+  const descEl=el.querySelector('.desc');
+  descEl.addEventListener('click',e=>{e.stopPropagation();descEl.classList.toggle('expanded');});
+  if(el.draggable){
+    el.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/plain',t.id);el.classList.add('dragging');});
+    el.addEventListener('dragend',()=>el.classList.remove('dragging'));
+  }
+  el.addEventListener('click',()=>openChat(t.id));
+  return el;
+}
+
+function renderBoard(){
+  boardEl.innerHTML='';
+  const p=proj(),q=searchBox.value.trim();
+  for(const st of p.steps){
+    const colEl=document.createElement('div');
+    const isAi=st.mode==='ai';
+    colEl.className='column '+((st.id==='archive')?'archived':(isAi?'ai':'human'));
+    colEl.dataset.col=st.id;
+    const list=tasks.filter(t=>t.pid===p.id&&t.step===st.id&&(!q||t.title.includes(q)||t.desc.includes(q)));
+    list.sort((a,b)=>RANK[a.substate]-RANK[b.substate]);
+    let tags='';
+    if(st.mode==='ai'){
+      if(st.agentIds.length){
+        const names=st.agentIds.map(id=>{const a=AGENTS.find(x=>x.id===id);return a?a.name:'';}).filter(Boolean);
+        tags=`<span class="tag-a">${esc(names[0]||'')}${names.length>1?' +'+(names.length-1):''}</span>`;
+      }else{
+        tags='<span class="tag-none">未绑定 Agent</span>';
+      }
+    }else if(st.agentIds.length){
+      tags='<span class="tag-none">保留 '+(st.agentIds.length)+' 个 Agent（未启用）</span>';
+    }
+    colEl.innerHTML=`<h2><span class="sname"><span>${isAi?'🤖':'🧑'}</span><span>${esc(st.label)}</span></span>`+
+      `<span class="count">${list.length}</span>`+
+      `<span class="tags">${tags}</span>`+
+      `<button class="col-set" title="步骤设置">⚙</button></h2><div class="cards"></div>`;
+    const cardsEl=colEl.querySelector('.cards');
+    for(const t of list)cardsEl.appendChild(cardEl(t));
+    cardsEl.addEventListener('dragover',e=>{e.preventDefault();colEl.classList.add('drop-hover');});
+    cardsEl.addEventListener('dragleave',()=>colEl.classList.remove('drop-hover'));
+    cardsEl.addEventListener('drop',e=>{
+      e.preventDefault();colEl.classList.remove('drop-hover');
+      const id=+e.dataTransfer.getData('text/plain');
+      if(id)moveToStep(id,st.id);
+    });
+    boardEl.appendChild(colEl);
+  }
+}
+
+function moveToStep(id,stepId){
+  const t=tasks.find(x=>x.id===id);
+  if(!t||t.step===stepId)return;
+  const p=PROJECTS.find(x=>x.id===t.pid);
+  const st=p.steps.find(s=>s.id===stepId);
+  t.step=stepId;t.substate='pending';t.stage='排队中';t.stall=false;t.startedAt=0;
+  curRec(t).chat.push({role:'system',text:`已推进到「${st.label}」。`});
+  renderBoard();renderChat();
+}
+
+/* ================= 流程逻辑 ================= */
+function dispatchTask(t){
+  t.substate='doing';t.stage='干活中';t.startedAt=Date.now();
+  curRec(t).agent=agentName(t);
+  curRec(t).chat.push({role:'agent',text:`🤖 ${agentName(t)||'agent'} 领取了这个任务，开始干活。`});
+}
+function advanceTask(t){
+  const p=PROJECTS.find(x=>x.id===t.pid);
+  const idx=p.steps.findIndex(s=>s.id===t.step);
+  const next=p.steps[idx+1];
+  if(!next)return;
+  const r=curRec(t);
+  if(!r.output)r.output={text:'完成。',files:[]};
+  t.step=next.id;t.substate='pending';t.stage='排队中';t.startedAt=0;
+  const nr=curRec(t);
+  nr.chat.push({role:'system',text:`✅ 完成，任务自动进入「${next.label}」。`});
+  if(next.id==='review'){
+    nr.chat.push({role:'agent',text:'✅ 干完了，改了 3 个文件，等你验收。'});
+    nr.chat.push({role:'system',text:'通过 → 归档；打回 → 回「实施」重做',decision:'review'});
+  }
+}
+function completeTask(t){
+  const st=stepOf(t);
+  const r=curRec(t);
+  if(st&&st.label==='规划'){
+    r.output={text:'规划完成：大纲 + 3 个待收敛问题',files:[]};
+    t.substate='awaiting-decision';
+    r.chat.push({role:'agent',text:'📋 规划完成。过程中发散出这些问题，请你收敛（回答 / 合并 / 丢弃）：',
+      decision:'converge',items:[
+        {q:'要不要先写大纲再动手？'},
+        {q:'配图用 AI 生成还是找现成图？'},
+        {q:'需要同步到其他渠道吗？'},
+      ]});
+  }else{
+    r.output={text:'完成：修改 3 个文件',files:['file-a.md','file-b.md']};
+    advanceTask(t);
+  }
+}
+function failTask(t){
+  t.failCount++;
+  if(t.failCount>=3){
+    t.fail=true;t.substate='pending';t.stage='排队中';t.startedAt=0;
+    curRec(t).output={text:'❌ 失败：css 编译报错',files:[]};
+    curRec(t).chat.push({role:'system',text:`❌ 已失败 ${t.failCount} 次，停止自动重派，等你处理。`});
+  }else{
+    t.substate='pending';t.stage='排队中';t.startedAt=0;
+    curRec(t).chat.push({role:'system',text:`❌ 第 ${t.failCount} 次失败（模拟原因），将自动重派。`});
+  }
+}
+function answerQuick(t,text){
+  curRec(t).chat.push({role:'user',text});
+  t.substate='pending';t.stage='排队中';
+  curRec(t).chat.push({role:'system',text:'✅ 已收到回答，任务重新进入排队，等待重新派发。'});
+  renderAll();
+}
+
+/* ================= 聊天 ================= */
+function decisionActions(t,m){
+  const wrap=document.createElement('div');wrap.className='actions';
+  const btn=(txt,cls,fn)=>{const b=document.createElement('button');b.textContent=txt;if(cls)b.className=cls;b.onclick=fn;wrap.appendChild(b);};
+  if(m.decision==='permission'&&t.lock){
+    btn('✅ 确认，允许','primary',()=>{t.lock=false;t.substate='pending';t.stage='排队中';
+      curRec(t).chat.push({role:'system',text:'🔓 权限已确认，任务进入排队。'});renderAll();});
+    btn('⛔ 拒绝','danger',()=>{t.lock=false;const p=PROJECTS.find(x=>x.id===t.pid);t.step=p.steps[0].id;t.substate='pending';
+      curRec(t).chat.push({role:'system',text:'🚫 权限被拒绝，任务退回「规划」。'});renderAll();});
+  }else if(m.decision==='review'&&t.step==='review'){
+    btn('✅ 通过','primary',()=>{t.step='archive';t.substate='pending';
+      curRec(t).chat.push({role:'system',text:'✅ 通过审查，任务归档。'});renderAll();});
+    btn('↩ 打回','danger',()=>{t.step='impl';t.substate='pending';t.stage='排队中';t.startedAt=0;
+      curRec(t).chat.push({role:'system',text:'↩ 已打回「实施」重做（记录保留）。'});renderAll();});
+  }else if(m.decision==='stall'&&t.stall){
+    btn('⏹ 中断','danger',()=>{t.stall=false;t.substate='pending';t.stage='排队中';t.startedAt=0;
+      curRec(t).chat.push({role:'system',text:'⏹ 已中断，任务回到排队。'});renderAll();});
+    btn('继续等待','',()=>{t.stall=false;
+      curRec(t).chat.push({role:'system',text:'⏳ 继续等待 agent 活动。'});renderAll();});
+  }else if(m.decision==='question'&&t.substate==='awaiting-decision'&&m.options){
+    for(const o of m.options)btn(o,'primary',()=>answerQuick(t,o));
+    const h=document.createElement('div');h.className='hint';h.textContent='也可以在下面输入框直接回答';
+    wrap.appendChild(h);
+  }else if(m.decision==='converge'&&t.substate==='awaiting-decision'){
+    const list=document.createElement('div');list.className='conv-items';
+    for(const it of m.items){
+      const row=document.createElement('div');row.className='conv-item';
+      if(it.resolved){
+        row.innerHTML=`<span class="conv-q">${esc(it.q)}</span><span class="conv-res">→ ${esc(it.resolved)}</span>`;
+      }else{
+        const q=document.createElement('span');q.className='conv-q';q.textContent=it.q;
+        const acts=document.createElement('span');acts.className='conv-acts';
+        for(const pair of [['回答','已回答'],['合并','已合并'],['丢弃','已丢弃']]){
+          const b=document.createElement('button');b.textContent=pair[0];
+          b.onclick=()=>{it.resolved=pair[1];renderChat();};
+          acts.appendChild(b);
+        }
+        row.appendChild(q);row.appendChild(acts);
+      }
+      list.appendChild(row);
+    }
+    wrap.appendChild(list);
+    if(m.items.every(i=>i.resolved)){
+      btn('✅ 收敛完成，进入下一步','primary',()=>{advanceTask(t);renderAll();});
+    }
+  }
+  return wrap;
+}
+
+function curExtras(t){
+  const frag=document.createDocumentFragment();
+  if(t.substate==='doing'){
+    const h=document.createElement('div');h.className='msg system';
+    const mk=(label,fn)=>{const b=document.createElement('button');b.textContent=label;
+      b.style.cssText='padding:3px 10px;border-radius:8px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;font-size:12px;margin:2px';
+      b.onclick=fn;h.appendChild(b);};
+    mk('⏩ 模拟完成',()=>{completeTask(t);renderAll();});
+    mk('❓ 模拟提问',()=>{t.substate='awaiting-decision';
+      curRec(t).chat.push({role:'agent',text:'❓ 这里有个选择：方案 A 还是方案 B？',decision:'question',options:['方案 A','方案 B']});
+      renderAll();});
+    mk('❌ 模拟失败',()=>{failTask(t);renderAll();});
+    frag.appendChild(h);
+  }else if(t.fail&&t.substate==='pending'){
+    const h=document.createElement('div');h.className='msg system';
+    const mk=(label,cls,fn)=>{const b=document.createElement('button');b.textContent=label;if(cls)b.className=cls;
+      b.style.cssText='padding:4px 12px;border-radius:8px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;font-size:12px;margin:2px';
+      b.onclick=fn;h.appendChild(b);};
+    mk('🔄 手动重派','primary',()=>{t.fail=false;t.failCount=0;t.substate='pending';
+      curRec(t).chat.push({role:'system',text:'🔄 手动重派，任务进入排队。'});renderAll();});
+    mk('🗑 放弃','danger',()=>{t.fail=false;t.step='archive';t.substate='pending';
+      curRec(t).chat.push({role:'system',text:'🗑 已放弃，任务归档。'});renderAll();});
+    frag.appendChild(h);
+  }else if(t.substate==='awaiting-decision'){
+    const h=document.createElement('div');h.className='msg system';
+    h.textContent='💬 等你决定：在下面输入框回答，回答后任务重新派发';
+    frag.appendChild(h);
+  }
+  return frag;
+}
+
+function renderChat(){
+  const t=tasks.find(x=>x.id===currentTaskId);
+  if(!t){chatPanel.classList.remove('open');return;}
+  const st=stepOf(t);
+  const p=PROJECTS.find(x=>x.id===t.pid);
+  document.getElementById('chatTitle').textContent=`[${t.level}] ${t.title}`;
+  const sEl=document.getElementById('chatStatus');
+  sEl.textContent=SUBS[t.substate]||t.substate;
+  sEl.className=t.substate;
+  document.getElementById('chatMeta').textContent=
+    `${p?p.name:''} · 当前步骤：${st?st.label:''}${t.substate==='doing'&&agentName(t)?' · '+agentName(t):''}`;
+  const marksEl=document.getElementById('chatMarks');
+  marksEl.innerHTML='';
+  if(t.lock)marksEl.innerHTML+='<span class="badge lock">🔒 权限待确认</span>';
+  if(t.fail)marksEl.innerHTML+='<span class="badge fail">❌ 已失败 3 次</span>';
+  if(t.stall)marksEl.innerHTML+='<span class="badge stall">⏳ 卡死</span>';
+  document.getElementById('chatDesc').innerHTML=md(t.desc);
+  const msgs=document.getElementById('chatMsgs');
+  msgs.querySelectorAll('.msg,.tsec,.tl-label').forEach(x=>x.remove());
+  const tl=document.createElement('div');tl.className='tl-label';tl.textContent='── 步骤时间线 ──';
+  msgs.appendChild(tl);
+  const order=p.steps.map(s=>s.id);
+  const recs=t.steps.slice().sort((a,b)=>order.indexOf(a.stepId)-order.indexOf(b.stepId));
+  for(const r of recs){
+    const stepObj=p.steps.find(s=>s.id===r.stepId);
+    if(!stepObj)continue;
+    const isCur=r.stepId===t.step;
+    const key=t.id+':'+r.stepId;
+    const open=isCur||expanded.has(key);
+    const sec=document.createElement('div');
+    sec.className='tsec'+(isCur?' current':'');
+    const head=document.createElement('div');
+    head.className='tsec-head';
+    head.innerHTML=`<span class="arrow">${open?'▼':'▶'}</span>`+
+      `<span class="step-label">${esc(stepObj.label)}</span>`+
+      (r.agent?`<span class="tsec-agent">${esc(r.agent)}</span>`:'')+
+      `<span class="tsec-n">${r.chat.length} 条消息</span>`+
+      (r.output?`<span class="tsec-out">📦 有产出</span>`:'');
+    if(!isCur)head.onclick=()=>{
+      if(expanded.has(key))expanded.delete(key);else expanded.add(key);
+      renderChat();
+    };
+    sec.appendChild(head);
+    if(open){
+      const body=document.createElement('div');
+      body.className='tsec-body';
+      if(r.output){
+        const o=document.createElement('div');o.className='tsec-output';
+        o.innerHTML=`<div class="t">📦 产出</div><div>${esc(r.output.text)}</div>`+
+          (r.output.files&&r.output.files.length?
+            `<div class="tsec-files">${r.output.files.map(f=>`<span class="file">${esc(f)}</span>`).join('')}</div>`:'');
+        body.appendChild(o);
+      }
+      for(const m of r.chat){
+        const el=document.createElement('div');
+        el.className='msg '+m.role;
+        el.textContent=m.text;
+        if(m.decision&&isCur)el.appendChild(decisionActions(t,m));
+        body.appendChild(el);
+      }
+      if(isCur)body.appendChild(curExtras(t));
+      sec.appendChild(body);
+    }
+    msgs.appendChild(sec);
+  }
+  msgs.scrollTop=msgs.scrollHeight;
+}
+
+function openChat(id){
+  currentTaskId=id;
+  expanded=new Set();
+  chatPanel.classList.add('open');
+  renderChat();
+}
+
+function sendChat(){
+  const input=document.getElementById('chatInput');
+  const text=input.value.trim();
+  if(!text||!currentTaskId)return;
+  const t=tasks.find(x=>x.id===currentTaskId);
+  curRec(t).chat.push({role:'user',text});
+  if(t.substate==='awaiting-decision'){
+    t.substate='pending';t.stage='排队中';
+    curRec(t).chat.push({role:'system',text:'✅ 已收到回答，任务重新进入排队，等待重新派发。'});
+  }else{
+    setTimeout(()=>{
+      if(currentTaskId===t.id){curRec(t).chat.push({role:'agent',text:'🤖 收到，我继续干。'});renderAll();}
+    },600);
+  }
+  input.value='';
+  renderAll();
+}
+
+function renderAll(){renderBoard();renderChat();}
+
+/* ================= 步骤设置浮层 ================= */
+function renderPop(){
+  const st=proj().steps.find(s=>s.id===popStepId);
+  if(!st)return;
+  document.getElementById('popStepName').textContent=`「${st.label}」步骤设置`;
+  const humanSel=document.getElementById('modeHuman');
+  const aiSel=document.getElementById('modeAi');
+  humanSel.className=st.mode==='human'?'sel-human':'';
+  aiSel.className=st.mode==='ai'?'sel-ai':'';
+  humanSel.querySelector('input').checked=st.mode==='human';
+  aiSel.querySelector('input').checked=st.mode==='ai';
+  document.getElementById('popAgentArea').style.display=st.mode==='ai'?'':'none';
+  document.getElementById('popHumanHint').style.display=st.mode==='human'?'':'none';
+  const q=document.getElementById('popSearch').value.trim();
+  const list=document.getElementById('popList');
+  list.innerHTML='';
+  if(st.mode==='ai'){
+    for(const a of AGENTS){
+      if(q&&!a.name.includes(q)&&!a.cap.includes(q))continue;
+      const row=document.createElement('div');
+      row.className='pop-item'+(a.health?'':' disabled');
+      const checked=st.agentIds.includes(a.id);
+      row.innerHTML=`<input type="checkbox" ${checked?'checked':''} ${a.health?'':'disabled'}>`+
+        `<span class="dot ${a.health?'ok':'bad'}"></span>`+
+        `<span>${esc(a.name)}</span><span class="cap">· ${esc(a.cap)}</span>`;
+      const cb=row.querySelector('input');
+      cb.addEventListener('change',()=>{
+        if(cb.checked){if(!st.agentIds.includes(a.id))st.agentIds.push(a.id);}
+        else{st.agentIds=st.agentIds.filter(x=>x!==a.id);}
+        renderBoard();renderPop();
+      });
+      list.appendChild(row);
+    }
+  }
+}
+function openPop(stepId,btnEl){
+  popStepId=stepId;
+  document.getElementById('popSearch').value='';
+  renderPop();
+  const r=btnEl.getBoundingClientRect();
+  stepPop.style.left=Math.min(r.left,window.innerWidth-320)+'px';
+  stepPop.style.top=(r.bottom+6)+'px';
+  stepPop.classList.add('open');
+}
+function closePop(){stepPop.classList.remove('open');}
+
+/* ================= 事件 ================= */
+boardEl.addEventListener('click',e=>{
+  const set=e.target.closest('.col-set');
+  if(set){
+    const colEl=set.closest('.column');
+    openPop(colEl.dataset.col,set);
+  }
+});
+document.addEventListener('click',e=>{
+  if(!stepPop.contains(e.target))closePop();
+});
+document.getElementById('popSearch').addEventListener('input',renderPop);
+for(const r of document.querySelectorAll('input[name=stepMode]')){
+  r.addEventListener('change',()=>{
+    const st=proj().steps.find(s=>s.id===popStepId);
+    if(st){st.mode=r.value;renderBoard();renderPop();}
+  });
+}
+projectSelect.addEventListener('change',()=>{currentProject=projectSelect.value;closePop();renderBoard();});
+searchBox.addEventListener('input',renderBoard);
+document.getElementById('chatClose').addEventListener('click',()=>chatPanel.classList.remove('open'));
+document.getElementById('chatSend').addEventListener('click',sendChat);
+document.getElementById('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
+document.getElementById('newTaskBtn').addEventListener('click',()=>{
+  document.getElementById('taskMask').classList.add('open');
+  document.getElementById('newTitle').value='';
+  document.getElementById('newDesc').value='';
+  document.getElementById('newTitle').focus();
+});
+document.getElementById('newCancel').addEventListener('click',()=>document.getElementById('taskMask').classList.remove('open'));
+document.getElementById('newOk').addEventListener('click',()=>{
+  const title=document.getElementById('newTitle').value.trim();
+  const desc=document.getElementById('newDesc').value.trim();
+  if(!title)return;
+  const level=document.getElementById('newLevel').value;
+  tasks.push(T({pid:currentProject,level,title,desc,step:proj().steps[0].id,substate:'pending',
+    steps:[{stepId:proj().steps[0].id,agent:'',chat:[{role:'system',text:'已创建。补齐信息后等待校验派发。'}]}]}));
+  document.getElementById('taskMask').classList.remove('open');
+  renderAll();
+});
+document.getElementById('popNew').addEventListener('click',()=>{
+  closePop();
+  document.getElementById('agName').value='';
+  document.getElementById('agCap').value='';
+  document.getElementById('agCmd').value='';
+  document.getElementById('agentMask').classList.add('open');
+});
+document.getElementById('agCancel').addEventListener('click',()=>document.getElementById('agentMask').classList.remove('open'));
+document.getElementById('agOk').addEventListener('click',()=>{
+  const name=document.getElementById('agName').value.trim();
+  if(!name)return;
+  const cap=document.getElementById('agCap').value.trim()||'通用';
+  const cmd=document.getElementById('agCmd').value.trim()||'-';
+  const a={id:'a'+(Date.now()),name,cap,health:true,cmd};
+  AGENTS.push(a);
+  const st=proj().steps.find(s=>s.id===popStepId);
+  if(st&&!st.agentIds.includes(a.id))st.agentIds.push(a.id);
+  document.getElementById('agentMask').classList.remove('open');
+  renderAll();
+});
+['taskMask','agentMask'].forEach(id=>{
+  document.getElementById(id).addEventListener('click',e=>{if(e.target.id===id)e.currentTarget.classList.remove('open');});
+});
+
+/* ================= 模拟循环 ================= */
+setInterval(()=>{
+  const p=proj();
+  for(const t of tasks.filter(x=>x.pid===p.id)){
+    if(t.substate==='pending'&&!t.fail&&!t.lock){
+      const st=p.steps.find(s=>s.id===t.step);
+      if(st&&st.mode==='ai'&&st.agentIds.length&&st.id!=='archive')dispatchTask(t);
+    }else if(t.substate==='doing'&&!t.stall&&Date.now()-t.startedAt>15000){
+      completeTask(t);
+    }
+  }
+  renderBoard();
+},3000);
+
+/* ================= 启动 ================= */
+initProjectSelect();
+projectSelect.value=currentProject;
+renderAll();
+</script>
+</body>
+</html>
